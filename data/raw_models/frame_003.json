@@ -1,0 +1,132 @@
+{
+  "points": [
+    {
+      "id": "P1",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "P2",
+      "x": 0,
+      "y": 1
+    },
+    {
+      "id": "P3",
+      "x": 0,
+      "y": 1.5
+    },
+    {
+      "id": "P4",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "id": "P5",
+      "x": 1.5,
+      "y": 1.5
+    }
+  ],
+  "links": [
+    {
+      "id": "L1",
+      "a": "P1",
+      "b": "P2",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    },
+    {
+      "id": "L2",
+      "a": "P2",
+      "b": "P3",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    },
+    {
+      "id": "L3",
+      "a": "P2",
+      "b": "P4",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "rigid",
+      "endB": "hinge"
+    },
+    {
+      "id": "L4",
+      "a": "P4",
+      "b": "P5",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    }
+  ],
+  "supports": [
+    {
+      "id": "S1",
+      "at": {
+        "type": "point",
+        "id": "P5"
+      },
+      "kind": "roller",
+      "angleDeg": 90
+    },
+    {
+      "id": "S2",
+      "at": {
+        "type": "point",
+        "id": "P1"
+      },
+      "kind": "fixed",
+      "angleDeg": 0
+    }
+  ],
+  "loads": [
+    {
+      "id": "LD1",
+      "kind": "pointLoad",
+      "at": {
+        "type": "point",
+        "id": "P3"
+      },
+      "value": 10,
+      "angleDeg": 0,
+      "angleMode": "relative",
+      "flip": 1
+    },
+    {
+      "id": "LD2",
+      "kind": "distributedLoad",
+      "at": {
+        "type": "link",
+        "id": "L3"
+      },
+      "fromStart": 0,
+      "fromEnd": 0,
+      "wStart": 10,
+      "wEnd": 10,
+      "angleDeg": 90,
+      "angleMode": "relative",
+      "flip": -1
+    },
+    {
+      "id": "LD3",
+      "kind": "bendingMoment",
+      "at": {
+        "type": "link",
+        "id": "L4"
+      },
+      "value": 10,
+      "flip": -1,
+      "refEnd": "A",
+      "offsetMode": "percent",
+      "offsetPercent": 50,
+      "offset": 0.3535533905932738
+    }
+  ]
+}

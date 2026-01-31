@@ -1,0 +1,133 @@
+{
+  "points": [
+    {
+      "id": "P1",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "P2",
+      "x": 0,
+      "y": 4
+    },
+    {
+      "id": "P3",
+      "x": 4,
+      "y": 4
+    },
+    {
+      "id": "P4",
+      "x": 4,
+      "y": 0
+    },
+    {
+      "id": "P5",
+      "x": -4,
+      "y": 4
+    }
+  ],
+  "links": [
+    {
+      "id": "L1",
+      "a": "P5",
+      "b": "P2",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    },
+    {
+      "id": "L2",
+      "a": "P2",
+      "b": "P3",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    },
+    {
+      "id": "L3",
+      "a": "P3",
+      "b": "P4",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    },
+    {
+      "id": "L4",
+      "a": "P2",
+      "b": "P1",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "hinge",
+      "endB": "rigid"
+    }
+  ],
+  "supports": [
+    {
+      "id": "S1",
+      "at": {
+        "type": "point",
+        "id": "P1"
+      },
+      "kind": "fixed",
+      "angleDeg": 0
+    },
+    {
+      "id": "S2",
+      "at": {
+        "type": "point",
+        "id": "P4"
+      },
+      "kind": "fixed",
+      "angleDeg": 0
+    },
+    {
+      "id": "S3",
+      "at": {
+        "type": "point",
+        "id": "P5"
+      },
+      "kind": "pin",
+      "angleDeg": 270
+    }
+  ],
+  "loads": [
+    {
+      "id": "LD1",
+      "kind": "distributedLoad",
+      "at": {
+        "type": "link",
+        "id": "L2"
+      },
+      "fromStart": 0,
+      "fromEnd": 0,
+      "wStart": 20,
+      "wEnd": 20,
+      "angleDeg": 90,
+      "angleMode": "world",
+      "angleWorldDeg": 90,
+      "flip": -1
+    },
+    {
+      "id": "LD2",
+      "kind": "pointLoad",
+      "at": {
+        "type": "link",
+        "id": "L4"
+      },
+      "value": 20,
+      "angleDeg": 90,
+      "angleMode": "world",
+      "angleWorldDeg": 0,
+      "flip": -1,
+      "refEnd": "A",
+      "offsetMode": "m",
+      "offsetPercent": 50,
+      "offset": 2
+    }
+  ]
+}

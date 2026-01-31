@@ -1,0 +1,5 @@
+openai>=1.0.0
+tqdm
+numpy
+json_repair
+wasmtime

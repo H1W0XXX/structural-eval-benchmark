@@ -1,0 +1,107 @@
+{
+  "points": [
+    {
+      "id": "P1",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "P2",
+      "x": 2,
+      "y": 0
+    },
+    {
+      "id": "P3",
+      "x": 3,
+      "y": 0
+    },
+    {
+      "id": "P4",
+      "x": 2,
+      "y": 1.5
+    }
+  ],
+  "links": [
+    {
+      "id": "L1",
+      "a": "P1",
+      "b": "P2",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    },
+    {
+      "id": "L2",
+      "a": "P2",
+      "b": "P3",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    },
+    {
+      "id": "L3",
+      "a": "P4",
+      "b": "P2",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "rigid",
+      "endB": "hinge"
+    }
+  ],
+  "supports": [
+    {
+      "id": "S1",
+      "at": {
+        "type": "point",
+        "id": "P1"
+      },
+      "kind": "pin",
+      "angleDeg": 0
+    },
+    {
+      "id": "S2",
+      "at": {
+        "type": "point",
+        "id": "P4"
+      },
+      "kind": "fixed",
+      "angleDeg": 180
+    }
+  ],
+  "loads": [
+    {
+      "id": "LD1",
+      "kind": "distributedLoad",
+      "at": {
+        "type": "link",
+        "id": "L1"
+      },
+      "fromStart": 0,
+      "fromEnd": 0,
+      "wStart": 80,
+      "wEnd": 80,
+      "angleDeg": 270,
+      "angleMode": "relative",
+      "flip": 1
+    },
+    {
+      "id": "LD2",
+      "kind": "distributedLoad",
+      "at": {
+        "type": "link",
+        "id": "L2"
+      },
+      "fromStart": 0,
+      "fromEnd": 0,
+      "wStart": 80,
+      "wEnd": 80,
+      "angleDeg": 270,
+      "angleMode": "relative",
+      "flip": 1
+    }
+  ]
+}

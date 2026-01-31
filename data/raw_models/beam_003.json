@@ -1,0 +1,87 @@
+{
+  "points": [
+    {
+      "id": "P7",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "P8",
+      "x": 4,
+      "y": 0
+    },
+    {
+      "id": "P9",
+      "x": 6,
+      "y": 0
+    }
+  ],
+  "links": [
+    {
+      "id": "L5",
+      "a": "P7",
+      "b": "P8",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    },
+    {
+      "id": "L6",
+      "a": "P8",
+      "b": "P9",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    }
+  ],
+  "supports": [
+    {
+      "id": "S3",
+      "at": {
+        "type": "point",
+        "id": "P7"
+      },
+      "kind": "pin",
+      "angleDeg": 0
+    },
+    {
+      "id": "S4",
+      "at": {
+        "type": "point",
+        "id": "P8"
+      },
+      "kind": "roller",
+      "angleDeg": 0
+    }
+  ],
+  "loads": [
+    {
+      "id": "LD4",
+      "kind": "distributedLoad",
+      "at": {
+        "type": "link",
+        "id": "L5"
+      },
+      "fromStart": 0,
+      "fromEnd": 0,
+      "wStart": 5,
+      "wEnd": 5,
+      "angleDeg": 90,
+      "angleMode": "world",
+      "angleWorldDeg": 90,
+      "flip": -1
+    },
+    {
+      "id": "LD5",
+      "kind": "bendingMoment",
+      "at": {
+        "type": "point",
+        "id": "P9"
+      },
+      "value": 8,
+      "flip": -1
+    }
+  ]
+}

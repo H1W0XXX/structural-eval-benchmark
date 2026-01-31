@@ -1,0 +1,108 @@
+{
+  "points": [
+    {
+      "id": "P1",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "P4",
+      "x": 8,
+      "y": 0
+    },
+    {
+      "id": "P5",
+      "x": 10,
+      "y": 0
+    }
+  ],
+  "links": [
+    {
+      "id": "L1",
+      "a": "P1",
+      "b": "P4",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    },
+    {
+      "id": "L2",
+      "a": "P4",
+      "b": "P5",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850
+    }
+  ],
+  "supports": [
+    {
+      "id": "S1",
+      "at": {
+        "type": "point",
+        "id": "P1"
+      },
+      "kind": "pin",
+      "angleDeg": 0
+    },
+    {
+      "id": "S2",
+      "at": {
+        "type": "point",
+        "id": "P4"
+      },
+      "kind": "roller",
+      "angleDeg": 0
+    }
+  ],
+  "loads": [
+    {
+      "id": "LD1",
+      "kind": "distributedLoad",
+      "at": {
+        "type": "link",
+        "id": "L2"
+      },
+      "fromStart": 0,
+      "fromEnd": 0,
+      "wStart": 2,
+      "wEnd": 2,
+      "angleDeg": 90,
+      "angleMode": "relative",
+      "flip": -1
+    },
+    {
+      "id": "LD2",
+      "kind": "pointLoad",
+      "at": {
+        "type": "link",
+        "id": "L1"
+      },
+      "value": 5,
+      "angleDeg": 270,
+      "angleMode": "relative",
+      "flip": 1,
+      "refEnd": "A",
+      "offsetMode": "m",
+      "offsetPercent": 25,
+      "offset": 2
+    },
+    {
+      "id": "LD3",
+      "kind": "pointLoad",
+      "at": {
+        "type": "link",
+        "id": "L1"
+      },
+      "value": 6,
+      "angleDeg": 270,
+      "angleMode": "relative",
+      "flip": 1,
+      "refEnd": "B",
+      "offsetMode": "m",
+      "offsetPercent": 37.5,
+      "offset": 3
+    }
+  ]
+}

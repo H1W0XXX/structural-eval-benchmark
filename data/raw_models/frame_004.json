@@ -1,0 +1,201 @@
+{
+  "points": [
+    {
+      "id": "P1",
+      "x": -8,
+      "y": 0
+    },
+    {
+      "id": "P2",
+      "x": -6,
+      "y": 0
+    },
+    {
+      "id": "P3",
+      "x": -6,
+      "y": 3
+    },
+    {
+      "id": "P4",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "P5",
+      "x": 6,
+      "y": 0
+    },
+    {
+      "id": "P6",
+      "x": 6,
+      "y": 3
+    },
+    {
+      "id": "P7",
+      "x": 8,
+      "y": 0
+    }
+  ],
+  "links": [
+    {
+      "id": "L1",
+      "a": "P1",
+      "b": "P3",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "rigid",
+      "endB": "hinge"
+    },
+    {
+      "id": "L2",
+      "a": "P3",
+      "b": "P2",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "hinge",
+      "endB": "rigid"
+    },
+    {
+      "id": "L3",
+      "a": "P2",
+      "b": "P4",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "rigid",
+      "endB": "hinge"
+    },
+    {
+      "id": "L4",
+      "a": "P4",
+      "b": "P5",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "hinge",
+      "endB": "rigid"
+    },
+    {
+      "id": "L5",
+      "a": "P6",
+      "b": "P5",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "hinge",
+      "endB": "rigid"
+    },
+    {
+      "id": "L6",
+      "a": "P6",
+      "b": "P7",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "hinge",
+      "endB": "rigid"
+    },
+    {
+      "id": "L7",
+      "a": "P6",
+      "b": "P4",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "rigid",
+      "endB": "hinge"
+    },
+    {
+      "id": "L8",
+      "a": "P3",
+      "b": "P4",
+      "E": 80918000,
+      "A": 0.007853981633974483,
+      "Iz": 0.000004908738521234054,
+      "density": 7850,
+      "endA": "rigid",
+      "endB": "hinge"
+    }
+  ],
+  "supports": [
+    {
+      "id": "S3",
+      "at": {
+        "type": "point",
+        "id": "P2"
+      },
+      "kind": "roller",
+      "angleDeg": 0
+    },
+    {
+      "id": "S4",
+      "at": {
+        "type": "point",
+        "id": "P5"
+      },
+      "kind": "roller",
+      "angleDeg": 0
+    },
+    {
+      "id": "S5",
+      "at": {
+        "type": "point",
+        "id": "P1"
+      },
+      "kind": "pin",
+      "angleDeg": 0
+    },
+    {
+      "id": "S6",
+      "at": {
+        "type": "point",
+        "id": "P7"
+      },
+      "kind": "pin",
+      "angleDeg": 0
+    }
+  ],
+  "loads": [
+    {
+      "id": "LD1",
+      "kind": "distributedLoad",
+      "at": {
+        "type": "link",
+        "id": "L3"
+      },
+      "fromStart": 0,
+      "fromEnd": 0,
+      "wStart": 10,
+      "wEnd": 10,
+      "angleDeg": 270,
+      "angleMode": "world",
+      "angleWorldDeg": 270,
+      "flip": 1
+    },
+    {
+      "id": "LD2",
+      "kind": "distributedLoad",
+      "at": {
+        "type": "link",
+        "id": "L4"
+      },
+      "fromStart": 0,
+      "fromEnd": 0,
+      "wStart": 10,
+      "wEnd": 10,
+      "angleDeg": 270,
+      "angleMode": "world",
+      "angleWorldDeg": 270,
+      "flip": 1
+    }
+  ]
+}
