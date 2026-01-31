@@ -141,6 +141,15 @@ $$
 \text{Weighted Accuracy} = \frac{\sum \text{Task Scores}}{\sum \text{Total Possible Difficulty}} \times 100\%
 $$ 
 
+## 📊 Leaderboard
+
+| Model | Weighted Accuracy | Avg Success Ratio | Notes |
+| :--- | :---: | :---: | :--- |
+| **GLM-4.5V** | **16.18%** | 21.25% | Retries: 3 |
+| **Qwen3-VL-32B-Instruct** | 13.24% | 23.75% | Retries: 3 |
+
+*Note: Data updated on 2026-01-31, based on v1.0 dataset (20 tasks).*
+
 ## License
 
 This project is licensed under **CC BY-NC 4.0 (Attribution-NonCommercial 4.0 International)**:

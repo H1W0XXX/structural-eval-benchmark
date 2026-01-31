@@ -38,3 +38,5 @@ desktop.ini
 # Project specific
 eval_result_*.json
 
+# Helper Scripts
+push_all.ps1
