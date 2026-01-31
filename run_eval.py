@@ -268,18 +268,25 @@ def main():
         # --- AI Mode ---
         else:
             base64_image = encode_image(task['image_path'])
-            messages = [
+            # 基础对话历史 (System + User/Image)
+            base_messages = [
                 {"role": "system", "content": current_system_prompt},
                 {"role": "user", "content": [
                     {"type": "text", "text": "Analyze the structure in this image and output the JSON definition."},
                     {"type": "image_url", "image_url": {"url": base64_image}}
                 ]}
             ]
+            
+            # 用于重试的上下文 (Last Assistant Response + Error)
+            retry_context = []
 
             for attempt in range(args.max_retries + 1):
                 attempts_used = attempt + 1
                 current_temp = 0.1 if attempt == 0 else 0.4
                 
+                # 构造本次请求的消息列表
+                messages = base_messages + retry_context
+
                 print(f"\n[Attempt {attempts_used}] Requesting API...")
                 response_text = run_chat_completion(client, args.model, messages, temperature=current_temp)
                 
@@ -333,11 +340,14 @@ def main():
                         error_feedback = f"JSON Syntax Error: {e}"
                         fail_reason = "Syntax Error"
 
-                # Retry Logic
+                # Retry Logic: 只保留最近一次的错误
                 if attempt < args.max_retries and error_feedback:
                     print(f"  -> Feedback: {error_feedback}")
-                    messages.append({"role": "assistant", "content": response_text})
-                    messages.append({"role": "user", "content": f"Error: {error_feedback} Fix the JSON."})
+                    # 更新 retry_context，覆盖掉旧的错误历史
+                    retry_context = [
+                        {"role": "assistant", "content": response_text},
+                        {"role": "user", "content": f"Error: {error_feedback} Fix the JSON."}
+                    ]
 
         # Final Score Calculation: Difficulty * Ratio
         final_score = best_score * task.get("difficulty", 1)
