@@ -178,7 +178,8 @@ $$
 
 | 模型 (Model) | 加权准确率 (Weighted Acc) | 平均成功率 (Avg Success Ratio) | 备注 (Notes) |
 | :--- | :---: | :---: | :--- |
-| **GLM-4.5V** | **16.18%** | 21.25% | Retries: 3 |
+| **Gemini-3-Pro-Preview** | **17.65%** | - | Retries: 3 |
+| **GLM-4.5V** | 16.18% | 21.25% | Retries: 3 |
 | **Qwen3-VL-32B-Instruct** | 13.24% | 23.75% | Retries: 3 |
 
 *注：数据更新于 2026-01-31，基于 v1.0 数据集 (20题).*
