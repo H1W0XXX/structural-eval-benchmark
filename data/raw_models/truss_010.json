@@ -1,0 +1,193 @@
+{
+  "points": [
+    {
+      "id": "P1",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "P2",
+      "x": 3,
+      "y": 0
+    },
+    {
+      "id": "P3",
+      "x": 9,
+      "y": 0
+    },
+    {
+      "id": "P4",
+      "x": 12,
+      "y": 0
+    },
+    {
+      "id": "P5",
+      "x": 3,
+      "y": 4
+    },
+    {
+      "id": "P6",
+      "x": 9,
+      "y": 4
+    }
+  ],
+  "links": [
+    {
+      "id": "L1",
+      "a": "P1",
+      "b": "P2",
+      "endA": "rigid",
+      "endB": "rigid",
+      "E": 80918000,
+      "A": 0.00785398,
+      "Iz": 0.00000491,
+      "density": 7850
+    },
+    {
+      "id": "L2",
+      "a": "P2",
+      "b": "P3",
+      "endA": "rigid",
+      "endB": "rigid",
+      "E": 80918000,
+      "A": 0.00785398,
+      "Iz": 0.00000491,
+      "density": 7850
+    },
+    {
+      "id": "L3",
+      "a": "P3",
+      "b": "P4",
+      "endA": "rigid",
+      "endB": "rigid",
+      "E": 80918000,
+      "A": 0.00785398,
+      "Iz": 0.00000491,
+      "density": 7850
+    },
+    {
+      "id": "L4",
+      "a": "P5",
+      "b": "P6",
+      "endA": "rigid",
+      "endB": "rigid",
+      "E": 80918000,
+      "A": 0.00785398,
+      "Iz": 0.00000491,
+      "density": 7850
+    },
+    {
+      "id": "L5",
+      "a": "P1",
+      "b": "P5",
+      "endA": "rigid",
+      "endB": "rigid",
+      "E": 80918000,
+      "A": 0.00785398,
+      "Iz": 0.00000491,
+      "density": 7850
+    },
+    {
+      "id": "L6",
+      "a": "P5",
+      "b": "P2",
+      "endA": "rigid",
+      "endB": "rigid",
+      "E": 80918000,
+      "A": 0.00785398,
+      "Iz": 0.00000491,
+      "density": 7850
+    },
+    {
+      "id": "L7",
+      "a": "P2",
+      "b": "P6",
+      "endA": "rigid",
+      "endB": "rigid",
+      "E": 80918000,
+      "A": 0.00785398,
+      "Iz": 0.00000491,
+      "density": 7850
+    },
+    {
+      "id": "L8",
+      "a": "P6",
+      "b": "P3",
+      "endA": "rigid",
+      "endB": "rigid",
+      "E": 80918000,
+      "A": 0.00785398,
+      "Iz": 0.00000491,
+      "density": 7850
+    },
+    {
+      "id": "L9",
+      "a": "P6",
+      "b": "P4",
+      "endA": "rigid",
+      "endB": "rigid",
+      "E": 80918000,
+      "A": 0.00785398,
+      "Iz": 0.00000491,
+      "density": 7850
+    }
+  ],
+  "supports": [
+    {
+      "id": "S1",
+      "at": {
+        "type": "point",
+        "id": "P1"
+      },
+      "kind": "roller",
+      "angleDeg": 0
+    },
+    {
+      "id": "S2",
+      "at": {
+        "type": "point",
+        "id": "P4"
+      },
+      "kind": "pin",
+      "angleDeg": 0
+    }
+  ],
+  "loads": [
+    {
+      "id": "LD1",
+      "kind": "pointLoad",
+      "at": {
+        "type": "point",
+        "id": "P2"
+      },
+      "value": 3,
+      "angleDeg": 270,
+      "angleMode": "world",
+      "flip": 1
+    },
+    {
+      "id": "LD2",
+      "kind": "pointLoad",
+      "at": {
+        "type": "point",
+        "id": "P3"
+      },
+      "value": 5,
+      "angleDeg": 270,
+      "angleMode": "world",
+      "flip": 1
+    },
+    {
+      "id": "LD3",
+      "kind": "pointLoad",
+      "at": {
+        "type": "point",
+        "id": "P6"
+      },
+      "value": 2,
+      "angleDeg": 0,
+      "angleMode": "world",
+      "flip": 1
+    }
+  ]
+}
