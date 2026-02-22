@@ -110,7 +110,7 @@ def apply_standard_load(model):
             "wStart": 10,
             "wEnd": 10,
             "angleDeg": 270, # 向下
-            "angleMode": "global"
+            "angleMode": "world"
         })
     return model
 
