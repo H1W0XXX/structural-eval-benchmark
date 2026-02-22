@@ -145,11 +145,10 @@ $$
 
 | Model | Weighted Accuracy | Notes |
 | :--- | :---: | :--- |
-| **Gemini-3-Pro-Preview** | **17.65%** | Retries: 3 |
-| **GLM-4.5V** | 16.18% | Retries: 3 |
-| **Qwen3-VL-32B-Instruct** | 13.24% | Retries: 3 |
+| **Qwen3-VL-32B-Instruct** | 35.16% | Retries: 3 |
+| **GLM-4.5V-INT8** | 19.53% | Retries: 3 |
 
-*Note: Data updated on 2026-01-31, based on v1.0 dataset (20 tasks).*
+*Note: Data updated on 2026.2.22, based on v1.0 dataset (25 tasks).*
 
 ## License
 

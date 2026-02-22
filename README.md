@@ -166,11 +166,10 @@ $$
 
 | 模型 (Model) | 加权准确率 (Weighted Acc) | 备注 (Notes) |
 | :--- | :---: | :--- |
-| **Gemini-3-Pro-Preview** | **17.65%** | Retries: 3 |
-| **GLM-4.5V** | 16.18% | Retries: 3 |
-| **Qwen3-VL-32B-Instruct** | 13.24% | Retries: 3 |
+| **Qwen3-VL-32B-Instruct** | 35.16% | Retries: 3 |
+| **GLM-4.5V-INT8** | 19.53% | Retries: 3 |
 
-*注：数据更新于 2026-01-31，基于 v1.0 数据集 (20题).*
+*注：数据更新于 2026.2.22，基于 v1.0 数据集 (25题).*
 
 ## 许可证
 
