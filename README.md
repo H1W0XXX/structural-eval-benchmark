@@ -166,6 +166,7 @@ $$
 
 | 模型 (Model) | 加权准确率 (Weighted Acc) | 备注 (Notes) |
 | :--- | :---: | :--- |
+| **Qwen3.5-35B-A3B** | 40.23% | Retries: 3 |
 | **Qwen3-VL-32B-Instruct** | 35.16% | Retries: 3 |
 | **GLM-4.5V-INT8** | 19.53% | Retries: 3 |
 

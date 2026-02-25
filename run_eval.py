@@ -282,7 +282,7 @@ def main():
 
             for attempt in range(args.max_retries + 1):
                 attempts_used = attempt + 1
-                current_temp = 0.1 if attempt == 0 else 0.4
+                current_temp = 0.6 if attempt == 0 else 0.7
                 
                 # 构造本次请求的消息列表
                 messages = base_messages + retry_context
