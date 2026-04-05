@@ -147,9 +147,10 @@ $$
 | :--- | :---: | :--- |
 | **Qwen3.5-35B-A3B** | 40.23% | Retries: 3 |
 | **Qwen3-VL-32B-Instruct** | 35.16% | Retries: 3 |
+| **gemma-4-31B-it** | 33.98% | Retries: 3 |
 | **GLM-4.5V-INT8** | 19.53% | Retries: 3 |
 
-*Note: Data updated on 2026.2.22, based on v1.0 dataset (25 tasks).*
+*Note: Data updated on 2026.4.5, based on v1.0 dataset (25 tasks).*
 
 ## License
 
