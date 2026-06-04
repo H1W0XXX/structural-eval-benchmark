@@ -5,6 +5,7 @@ import base64
 import argparse
 import mimetypes
 import copy
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from openai import OpenAI
 import traceback
@@ -236,6 +237,214 @@ def diagnose_failure(solver, ai_json, gt_json):
         return 0.50, "Geometry and supports are correct, but the member connection types (hinge/rigid) are incorrect."
 
 
+def evaluate_task(task, args, current_system_prompt):
+    task_id = task['id']
+    gt_solution = task['gt_solution']
+    if isinstance(gt_solution, list) and len(gt_solution) > 0: gt_solution = gt_solution[0]
+
+    loader = BenchmarkDataLoader()
+    solver = TrussSolver("bin/framecalc.wasm")
+    client = OpenAI(api_key=args.api_key, base_url=args.api_base) if not args.debug else None
+
+    # Load Raw GT Model for diagnosis
+    gt_raw_json = loader.load_raw_model_by_id(task_id)
+
+    best_score = 0
+    final_details = {}
+    fail_reason = "Unknown"
+    attempts_used = 0
+    best_attempt = 0
+    attempt_logs = []
+
+    # --- Debug Mode ---
+    if args.debug:
+        attempts_used = 1
+        ai_json = gt_raw_json
+        if not ai_json:
+            fail_reason = "GT JSON Missing"
+        else:
+            ai_solution, solver_error = solver.solve(ai_json)
+            if solver_error:
+                fail_reason = f"Physics Solver Crashed: {solver_error}"
+            else:
+                score, details = compute_score(ai_solution, gt_solution)
+                best_score = score
+                best_attempt = 1
+                final_details = details
+                fail_reason = "Success" if score == 1.0 else "Wrong Answer"
+
+    # --- AI Mode ---
+    else:
+        base64_image = encode_image(task['image_path'])
+        # 基础对话历史 (System + User/Image)
+        base_messages = [
+            {"role": "system", "content": current_system_prompt},
+            {"role": "user", "content": [
+                {"type": "text", "text": "Analyze the structure in this image and output the JSON definition."},
+                {"type": "image_url", "image_url": {"url": base64_image}}
+            ]}
+        ]
+        
+        # 用于重试的上下文 (Last Assistant Response + Error)
+        retry_context = []
+
+        for attempt in range(args.max_retries + 1):
+            attempts_used = attempt + 1
+            current_temp = 0.6 if attempt == 0 else 0.7
+            
+            # 构造本次请求的消息列表
+            messages = base_messages + retry_context
+
+            tqdm.write(f"[{task_id}] attempt {attempts_used}/{args.max_retries + 1}: requesting API")
+            response_text = run_chat_completion(
+                client,
+                args.model,
+                messages,
+                temperature=current_temp,
+                stream_output=args.verbose_response
+            )
+            attempt_log = {
+                "attempt": attempts_used,
+                "temperature": current_temp,
+                "response_text": response_text,
+                "extracted_json": None,
+                "feedback": "",
+                "score": None,
+                "details": {},
+                "failure": None
+            }
+            
+            if not response_text:
+                fail_reason = "API Failure"
+                attempt_log["failure"] = fail_reason
+                attempt_logs.append(attempt_log)
+                tqdm.write(f"[{task_id}] attempt {attempts_used}: API failure")
+                break
+
+            json_str = extract_json(response_text)
+            attempt_log["extracted_json"] = json_str
+            error_feedback = ""
+
+            if not json_str:
+                error_feedback = "I cannot find valid JSON. Please output standard JSON inside <json> tags."
+                fail_reason = "Parse Error"
+                attempt_log["failure"] = fail_reason
+            else:
+                try:
+                    ai_json = JSON_LIB.loads(json_str)
+                    ai_solution, solver_error = solver.solve(ai_json)
+
+                    if solver_error:
+                        error_feedback = f"Solver Error: {solver_error}. Check connectivity."
+                        fail_reason = "Solver Crashed"
+                        attempt_log["failure"] = fail_reason
+                    elif not ai_solution:
+                        error_feedback = "Unstable structure (empty result)."
+                        fail_reason = "Unstable"
+                        attempt_log["failure"] = fail_reason
+                    else:
+                        score, details = compute_score(ai_solution, gt_solution)
+                        attempt_log["score"] = score
+                        attempt_log["details"] = details
+
+                        if score == 1.0:
+                            best_score = 1.0
+                            best_attempt = attempts_used
+                            final_details = details
+                            fail_reason = "Success"
+                            attempt_log["failure"] = None
+                            attempt_logs.append(attempt_log)
+                            tqdm.write(f"[{task_id}] attempt {attempts_used}: success")
+                            break # Perfect! 
+                        else:
+                            # ❌ 计算结果不对，启动诊断
+                            fail_reason = "Wrong Answer"
+                            final_details = details
+                            attempt_log["failure"] = fail_reason
+                            
+                            # 只有当存在 GT Raw Model 时才能诊断
+                            if gt_raw_json:
+                                partial_score, diag_feedback = diagnose_failure(solver, ai_json, gt_raw_json)
+                                error_feedback = f"Result incorrect. Diagnostic: {diag_feedback}"
+                                attempt_log["diagnostic_score"] = partial_score
+                                
+                                best_score, best_attempt, final_details, fail_reason = keep_best_retry_score(
+                                    best_score,
+                                    best_attempt,
+                                    final_details,
+                                    fail_reason,
+                                    partial_score,
+                                    attempts_used,
+                                    details,
+                                    f"Partial: {diag_feedback}",
+                                )
+                            else:
+                                error_feedback = "Result incorrect (Reaction forces mismatch)."
+
+                except Exception as e:
+                    error_feedback = f"JSON Syntax Error: {e}"
+                    fail_reason = "Syntax Error"
+                    attempt_log["failure"] = fail_reason
+
+            attempt_log["feedback"] = error_feedback
+            attempt_logs.append(attempt_log)
+
+            # Retry Logic: 只保留最近一次的错误
+            if attempt < args.max_retries and error_feedback:
+                tqdm.write(f"[{task_id}] attempt {attempts_used}: {short_text(error_feedback)}")
+                # 更新 retry_context，覆盖掉旧的错误历史
+                retry_context = [
+                    {"role": "assistant", "content": response_text},
+                    {"role": "user", "content": f"Error: {error_feedback} Fix the JSON."}
+                ]
+
+    # Final Score Calculation: Difficulty * Ratio
+    final_score = best_score * task.get("difficulty", 1)
+
+    result = {
+        "id": task_id,
+        "score": final_score, # Now this is weighted
+        "ratio": best_score,  # Store the raw ratio (0.0 - 1.0)
+        "difficulty": task.get("difficulty", 1),
+        "reason": fail_reason,
+        "attempts_used": attempts_used,
+        "best_attempt": best_attempt,
+        "details": final_details,
+        "attempt_logs": attempt_logs
+    }
+    tqdm.write(f"[{task_id}] done: ratio={best_score:.2f}, reason={fail_reason}, attempts={attempts_used}")
+    return result
+
+
+def run_task_batch(tasks, concurrency, task_runner, show_progress=True):
+    """
+    题目级调度。并发完成顺序可能不同，但返回结果始终保持输入任务顺序。
+    """
+    if concurrency < 1:
+        raise ValueError("concurrency must be >= 1")
+
+    if concurrency == 1:
+        iterator = enumerate(tasks)
+        if show_progress:
+            iterator = tqdm(iterator, total=len(tasks), desc="Evaluating", ascii=True)
+        return [task_runner(index, task) for index, task in iterator]
+
+    results = [None] * len(tasks)
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        future_to_index = {
+            executor.submit(task_runner, index, task): index
+            for index, task in enumerate(tasks)
+        }
+        iterator = as_completed(future_to_index)
+        if show_progress:
+            iterator = tqdm(iterator, total=len(tasks), desc="Evaluating", ascii=True)
+        for future in iterator:
+            index = future_to_index[future]
+            results[index] = future.result()
+
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Structural AI Benchmark Evaluator")
     parser.add_argument("--model", type=str, default="debug-mode", help="Model name")
@@ -247,8 +456,11 @@ def main():
     parser.add_argument("--prompt-type", type=str, default="standard", choices=PROMPT_REGISTRY.keys())
     parser.add_argument("--filter", type=str, default=None, help="Filter tasks")
     parser.add_argument("--verbose-response", action="store_true", help="Print full streaming model responses to console")
+    parser.add_argument("--concurrency", type=int, default=1, help="Number of tasks to evaluate concurrently")
 
     args = parser.parse_args()
+    if args.concurrency < 1:
+        parser.error("--concurrency must be >= 1")
 
     # 1. System Prompt
     current_system_prompt = PROMPT_REGISTRY.get(args.prompt_type)
@@ -256,8 +468,6 @@ def main():
 
     # 2. Components
     loader = BenchmarkDataLoader()
-    solver = TrussSolver("bin/framecalc.wasm")
-    client = OpenAI(api_key=args.api_key, base_url=args.api_base) if not args.debug else None
 
     # 3. Tasks
     tasks = loader.load_tasks_for_eval()
@@ -268,181 +478,15 @@ def main():
     if args.limit > 0:
         tasks = tasks[:args.limit]
 
-    print(f"Starting evaluation on {len(tasks)} tasks.")
-    results = []
+    print(f"Starting evaluation on {len(tasks)} tasks. Concurrency: {args.concurrency}")
+    if args.concurrency > 1 and args.verbose_response:
+        print("[Warning] --verbose-response output may interleave when --concurrency > 1.")
 
-    for task in tqdm(tasks, desc="Evaluating", ascii=True):
-        task_id = task['id']
-        gt_solution = task['gt_solution']
-        if isinstance(gt_solution, list) and len(gt_solution) > 0: gt_solution = gt_solution[0]
-
-        # Load Raw GT Model for diagnosis
-        gt_raw_json = loader.load_raw_model_by_id(task_id)
-
-        best_score = 0
-        final_details = {}
-        fail_reason = "Unknown"
-        attempts_used = 0
-        best_attempt = 0
-        attempt_logs = []
-
-        # --- Debug Mode ---
-        if args.debug:
-            attempts_used = 1
-            ai_json = gt_raw_json
-            if not ai_json:
-                fail_reason = "GT JSON Missing"
-            else:
-                ai_solution, solver_error = solver.solve(ai_json)
-                if solver_error:
-                    fail_reason = f"Physics Solver Crashed: {solver_error}"
-                else:
-                    score, details = compute_score(ai_solution, gt_solution)
-                    best_score = score
-                    best_attempt = 1
-                    final_details = details
-                    fail_reason = "Success" if score == 1.0 else "Wrong Answer"
-
-        # --- AI Mode ---
-        else:
-            base64_image = encode_image(task['image_path'])
-            # 基础对话历史 (System + User/Image)
-            base_messages = [
-                {"role": "system", "content": current_system_prompt},
-                {"role": "user", "content": [
-                    {"type": "text", "text": "Analyze the structure in this image and output the JSON definition."},
-                    {"type": "image_url", "image_url": {"url": base64_image}}
-                ]}
-            ]
-            
-            # 用于重试的上下文 (Last Assistant Response + Error)
-            retry_context = []
-
-            for attempt in range(args.max_retries + 1):
-                attempts_used = attempt + 1
-                current_temp = 0.6 if attempt == 0 else 0.7
-                
-                # 构造本次请求的消息列表
-                messages = base_messages + retry_context
-
-                tqdm.write(f"[{task_id}] attempt {attempts_used}/{args.max_retries + 1}: requesting API")
-                response_text = run_chat_completion(
-                    client,
-                    args.model,
-                    messages,
-                    temperature=current_temp,
-                    stream_output=args.verbose_response
-                )
-                attempt_log = {
-                    "attempt": attempts_used,
-                    "temperature": current_temp,
-                    "response_text": response_text,
-                    "extracted_json": None,
-                    "feedback": "",
-                    "score": None,
-                    "details": {},
-                    "failure": None
-                }
-                
-                if not response_text:
-                    fail_reason = "API Failure"
-                    attempt_log["failure"] = fail_reason
-                    attempt_logs.append(attempt_log)
-                    tqdm.write(f"[{task_id}] attempt {attempts_used}: API failure")
-                    break
-
-                json_str = extract_json(response_text)
-                attempt_log["extracted_json"] = json_str
-                error_feedback = ""
-
-                if not json_str:
-                    error_feedback = "I cannot find valid JSON. Please output standard JSON inside <json> tags."
-                    fail_reason = "Parse Error"
-                    attempt_log["failure"] = fail_reason
-                else:
-                    try:
-                        ai_json = JSON_LIB.loads(json_str)
-                        ai_solution, solver_error = solver.solve(ai_json)
-
-                        if solver_error:
-                            error_feedback = f"Solver Error: {solver_error}. Check connectivity."
-                            fail_reason = "Solver Crashed"
-                            attempt_log["failure"] = fail_reason
-                        elif not ai_solution:
-                            error_feedback = "Unstable structure (empty result)."
-                            fail_reason = "Unstable"
-                            attempt_log["failure"] = fail_reason
-                        else:
-                            score, details = compute_score(ai_solution, gt_solution)
-                            attempt_log["score"] = score
-                            attempt_log["details"] = details
-
-                            if score == 1.0:
-                                best_score = 1.0
-                                best_attempt = attempts_used
-                                final_details = details
-                                fail_reason = "Success"
-                                attempt_log["failure"] = None
-                                attempt_logs.append(attempt_log)
-                                tqdm.write(f"[{task_id}] attempt {attempts_used}: success")
-                                break # Perfect! 
-                            else:
-                                # ❌ 计算结果不对，启动诊断
-                                fail_reason = "Wrong Answer"
-                                final_details = details
-                                attempt_log["failure"] = fail_reason
-                                
-                                # 只有当存在 GT Raw Model 时才能诊断
-                                if gt_raw_json:
-                                    partial_score, diag_feedback = diagnose_failure(solver, ai_json, gt_raw_json)
-                                    error_feedback = f"Result incorrect. Diagnostic: {diag_feedback}"
-                                    attempt_log["diagnostic_score"] = partial_score
-                                    
-                                    best_score, best_attempt, final_details, fail_reason = keep_best_retry_score(
-                                        best_score,
-                                        best_attempt,
-                                        final_details,
-                                        fail_reason,
-                                        partial_score,
-                                        attempts_used,
-                                        details,
-                                        f"Partial: {diag_feedback}",
-                                    )
-                                else:
-                                    error_feedback = "Result incorrect (Reaction forces mismatch)."
-
-                    except Exception as e:
-                        error_feedback = f"JSON Syntax Error: {e}"
-                        fail_reason = "Syntax Error"
-                        attempt_log["failure"] = fail_reason
-
-                attempt_log["feedback"] = error_feedback
-                attempt_logs.append(attempt_log)
-
-                # Retry Logic: 只保留最近一次的错误
-                if attempt < args.max_retries and error_feedback:
-                    tqdm.write(f"[{task_id}] attempt {attempts_used}: {short_text(error_feedback)}")
-                    # 更新 retry_context，覆盖掉旧的错误历史
-                    retry_context = [
-                        {"role": "assistant", "content": response_text},
-                        {"role": "user", "content": f"Error: {error_feedback} Fix the JSON."}
-                    ]
-
-        # Final Score Calculation: Difficulty * Ratio
-        final_score = best_score * task.get("difficulty", 1)
-
-        results.append({
-            "id": task_id,
-            "score": final_score, # Now this is weighted
-            "ratio": best_score,  # Store the raw ratio (0.0 - 1.0)
-            "difficulty": task.get("difficulty", 1),
-            "reason": fail_reason,
-            "attempts_used": attempts_used,
-            "best_attempt": best_attempt,
-            "details": final_details,
-            "attempt_logs": attempt_logs
-        })
-        tqdm.write(f"[{task_id}] done: ratio={best_score:.2f}, reason={fail_reason}, attempts={attempts_used}")
+    results = run_task_batch(
+        tasks,
+        args.concurrency,
+        lambda index, task: evaluate_task(task, args, current_system_prompt),
+    )
 
     # Summary
     total_score = sum(r['score'] for r in results)
