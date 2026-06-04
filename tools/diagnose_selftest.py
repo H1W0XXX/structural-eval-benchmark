@@ -1,7 +1,11 @@
 import copy
 import json
+import os
+import sys
 import unittest
 from pathlib import Path
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from run_eval import diagnose_failure
 from src.solver_bridge import TrussSolver

@@ -66,10 +66,22 @@ def extract_json(response_text):
     return None
 
 
-def run_chat_completion(client, model_name, messages, temperature=0.2):
-    """封装 API 调用 (支持流式输出)"""
+def short_text(text, max_len=160):
+    """压缩日志文本，避免控制台输出太长。"""
+    if not text:
+        return ""
+    compact = " ".join(str(text).split())
+    if len(compact) <= max_len:
+        return compact
+    return compact[:max_len - 3] + "..."
+
+
+def run_chat_completion(client, model_name, messages, temperature=0.2, stream_output=False):
+    """封装 API 调用，默认只收集完整回复，不逐 token 打印。"""
     try:
-        print(f"\n[Model Output Start]:")
+        if stream_output:
+            print(f"\n[Model Output Start]:")
+
         stream = client.chat.completions.create(
             model=model_name,
             messages=messages,
@@ -83,15 +95,36 @@ def run_chat_completion(client, model_name, messages, temperature=0.2):
             if chunk.choices:
                 delta = chunk.choices[0].delta.content
                 if delta:
-                    print(delta, end="", flush=True)
+                    if stream_output:
+                        print(delta, end="", flush=True)
                     full_content.append(delta)
-        
-        print(f"\n[Model Output End]\n{'-'*40}")
+
+        if stream_output:
+            print(f"\n[Model Output End]\n{'-'*40}")
+
         return "".join(full_content)
 
     except Exception as e:
         print(f"\n[API Error] {e}")
         return None
+
+
+def keep_best_retry_score(
+    best_score,
+    best_attempt,
+    final_details,
+    fail_reason,
+    candidate_score,
+    candidate_attempt,
+    candidate_details,
+    candidate_reason,
+):
+    """
+    Retry 评分策略：保留历史最高分；同分时保留更早的尝试，便于结果稳定。
+    """
+    if best_attempt == 0 or candidate_score > best_score:
+        return candidate_score, candidate_attempt, candidate_details, candidate_reason
+    return best_score, best_attempt, final_details, fail_reason
 
 
 # --- 诊断相关函数 ---
@@ -213,6 +246,7 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Run sanity check using Ground Truth JSON (No AI)")
     parser.add_argument("--prompt-type", type=str, default="standard", choices=PROMPT_REGISTRY.keys())
     parser.add_argument("--filter", type=str, default=None, help="Filter tasks")
+    parser.add_argument("--verbose-response", action="store_true", help="Print full streaming model responses to console")
 
     args = parser.parse_args()
 
@@ -237,7 +271,7 @@ def main():
     print(f"Starting evaluation on {len(tasks)} tasks.")
     results = []
 
-    for task in tqdm(tasks, desc="Evaluating"):
+    for task in tqdm(tasks, desc="Evaluating", ascii=True):
         task_id = task['id']
         gt_solution = task['gt_solution']
         if isinstance(gt_solution, list) and len(gt_solution) > 0: gt_solution = gt_solution[0]
@@ -249,9 +283,12 @@ def main():
         final_details = {}
         fail_reason = "Unknown"
         attempts_used = 0
+        best_attempt = 0
+        attempt_logs = []
 
         # --- Debug Mode ---
         if args.debug:
+            attempts_used = 1
             ai_json = gt_raw_json
             if not ai_json:
                 fail_reason = "GT JSON Missing"
@@ -262,6 +299,7 @@ def main():
                 else:
                     score, details = compute_score(ai_solution, gt_solution)
                     best_score = score
+                    best_attempt = 1
                     final_details = details
                     fail_reason = "Success" if score == 1.0 else "Wrong Answer"
 
@@ -287,19 +325,40 @@ def main():
                 # 构造本次请求的消息列表
                 messages = base_messages + retry_context
 
-                print(f"\n[Attempt {attempts_used}] Requesting API...")
-                response_text = run_chat_completion(client, args.model, messages, temperature=current_temp)
+                tqdm.write(f"[{task_id}] attempt {attempts_used}/{args.max_retries + 1}: requesting API")
+                response_text = run_chat_completion(
+                    client,
+                    args.model,
+                    messages,
+                    temperature=current_temp,
+                    stream_output=args.verbose_response
+                )
+                attempt_log = {
+                    "attempt": attempts_used,
+                    "temperature": current_temp,
+                    "response_text": response_text,
+                    "extracted_json": None,
+                    "feedback": "",
+                    "score": None,
+                    "details": {},
+                    "failure": None
+                }
                 
                 if not response_text:
                     fail_reason = "API Failure"
+                    attempt_log["failure"] = fail_reason
+                    attempt_logs.append(attempt_log)
+                    tqdm.write(f"[{task_id}] attempt {attempts_used}: API failure")
                     break
 
                 json_str = extract_json(response_text)
+                attempt_log["extracted_json"] = json_str
                 error_feedback = ""
 
                 if not json_str:
                     error_feedback = "I cannot find valid JSON. Please output standard JSON inside <json> tags."
                     fail_reason = "Parse Error"
+                    attempt_log["failure"] = fail_reason
                 else:
                     try:
                         ai_json = JSON_LIB.loads(json_str)
@@ -308,41 +367,61 @@ def main():
                         if solver_error:
                             error_feedback = f"Solver Error: {solver_error}. Check connectivity."
                             fail_reason = "Solver Crashed"
+                            attempt_log["failure"] = fail_reason
                         elif not ai_solution:
                             error_feedback = "Unstable structure (empty result)."
                             fail_reason = "Unstable"
+                            attempt_log["failure"] = fail_reason
                         else:
                             score, details = compute_score(ai_solution, gt_solution)
+                            attempt_log["score"] = score
+                            attempt_log["details"] = details
 
                             if score == 1.0:
                                 best_score = 1.0
+                                best_attempt = attempts_used
                                 final_details = details
                                 fail_reason = "Success"
+                                attempt_log["failure"] = None
+                                attempt_logs.append(attempt_log)
+                                tqdm.write(f"[{task_id}] attempt {attempts_used}: success")
                                 break # Perfect! 
                             else:
                                 # ❌ 计算结果不对，启动诊断
                                 fail_reason = "Wrong Answer"
                                 final_details = details
+                                attempt_log["failure"] = fail_reason
                                 
                                 # 只有当存在 GT Raw Model 时才能诊断
                                 if gt_raw_json:
                                     partial_score, diag_feedback = diagnose_failure(solver, ai_json, gt_raw_json)
                                     error_feedback = f"Result incorrect. Diagnostic: {diag_feedback}"
+                                    attempt_log["diagnostic_score"] = partial_score
                                     
-                                    # 如果是最后一次尝试，记录诊断得分为最终得分
-                                    if attempt == args.max_retries:
-                                        best_score = partial_score
-                                        fail_reason = f"Partial: {diag_feedback}"
+                                    best_score, best_attempt, final_details, fail_reason = keep_best_retry_score(
+                                        best_score,
+                                        best_attempt,
+                                        final_details,
+                                        fail_reason,
+                                        partial_score,
+                                        attempts_used,
+                                        details,
+                                        f"Partial: {diag_feedback}",
+                                    )
                                 else:
                                     error_feedback = "Result incorrect (Reaction forces mismatch)."
 
                     except Exception as e:
                         error_feedback = f"JSON Syntax Error: {e}"
                         fail_reason = "Syntax Error"
+                        attempt_log["failure"] = fail_reason
+
+                attempt_log["feedback"] = error_feedback
+                attempt_logs.append(attempt_log)
 
                 # Retry Logic: 只保留最近一次的错误
                 if attempt < args.max_retries and error_feedback:
-                    print(f"  -> Feedback: {error_feedback}")
+                    tqdm.write(f"[{task_id}] attempt {attempts_used}: {short_text(error_feedback)}")
                     # 更新 retry_context，覆盖掉旧的错误历史
                     retry_context = [
                         {"role": "assistant", "content": response_text},
@@ -359,8 +438,11 @@ def main():
             "difficulty": task.get("difficulty", 1),
             "reason": fail_reason,
             "attempts_used": attempts_used,
-            "details": final_details
+            "best_attempt": best_attempt,
+            "details": final_details,
+            "attempt_logs": attempt_logs
         })
+        tqdm.write(f"[{task_id}] done: ratio={best_score:.2f}, reason={fail_reason}, attempts={attempts_used}")
 
     # Summary
     total_score = sum(r['score'] for r in results)
@@ -370,7 +452,7 @@ def main():
     weighted_acc = (total_score / total_possible) * 100 if total_possible else 0
 
     print("\n" + "=" * 60)
-    print(f"📊 Evaluation Report: {args.model}")
+    print(f"Evaluation Report: {args.model}")
     print(f"Filter: {args.filter if args.filter else 'None'} | Max Retries: {args.max_retries}")
     print("-" * 60)
     print(f"{'Category':<15} | {'Tasks':<8} | {'Score':<10} | {'Max Score':<10} | {'Accuracy':<10}")
