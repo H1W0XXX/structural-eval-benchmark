@@ -15,6 +15,7 @@ from src.solver_bridge import TrussSolver
 from src.metrics import compute_score
 from src.data_loader import BenchmarkDataLoader
 from src.prompts import PROMPT_REGISTRY
+from src.checkpoint import CheckpointStore, StreamProgress, append_event, atomic_json
 
 # 尝试引入 json_repair，如果没有安装则退化到 json
 try:
@@ -60,9 +61,31 @@ def extract_json(response_text):
     match = re.search(r'```(.*?)```', response_text, re.DOTALL)
     if match: return match.group(1).strip()
 
-    # 5. 找最外层大括号
-    match = re.search(r'\{.*?\}', response_text, re.DOTALL)
-    if match: return match.group(0).strip()
+    # 5. 按括号层级提取完整对象，忽略字符串内部的括号与转义引号。
+    start = response_text.find('{')
+    if start >= 0:
+        depth = 0
+        in_string = False
+        escaped = False
+        for index in range(start, len(response_text)):
+            char = response_text[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == '\\':
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+            elif char == '"':
+                in_string = True
+            elif char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    return response_text[start:index + 1].strip()
+        # 保留完整的未闭合片段供 json_repair 尝试恢复。
+        return response_text[start:].strip()
 
     return None
 
@@ -77,23 +100,46 @@ def short_text(text, max_len=160):
     return compact[:max_len - 3] + "..."
 
 
-def run_chat_completion(client, model_name, messages, temperature=0.2, stream_output=False):
+def run_chat_completion(client, model_name, messages, temperature=0.2, stream_output=False,
+                        max_tokens=8192, metadata=None, reasoning_effort=None,
+                        progress_label=None, events_path=None, progress_interval=15):
     """封装 API 调用，默认只收集完整回复，不逐 token 打印。"""
+    if metadata is None:
+        metadata = {}
+    metadata.update(finish_reason=None, usage=None, reasoning_chars=0, error=None)
+    progress = StreamProgress(progress_label, events_path, progress_interval) if progress_label else None
+    if progress:
+        progress.start()
+    stream = None
     try:
         if stream_output:
             print(f"\n[Model Output Start]:")
 
+        request_options = {}
+        if reasoning_effort:
+            request_options['reasoning_effort'] = reasoning_effort
         stream = client.chat.completions.create(
             model=model_name,
             messages=messages,
             temperature=temperature,
-            max_tokens=8192,
-            stream=True
+            max_tokens=max_tokens,
+            stream=True,
+            stream_options={"include_usage": True},
+            **request_options,
         )
         
         full_content = []
         for chunk in stream:
+            if progress:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                progress.received(getattr(delta, 'content', None), getattr(delta, 'reasoning_content', None))
+            if chunk.usage:
+                metadata['usage'] = chunk.usage.model_dump()
             if chunk.choices:
+                choice = chunk.choices[0]
+                if choice.finish_reason:
+                    metadata['finish_reason'] = choice.finish_reason
+                metadata['reasoning_chars'] += len(getattr(choice.delta, 'reasoning_content', None) or '')
                 delta = chunk.choices[0].delta.content
                 if delta:
                     if stream_output:
@@ -106,8 +152,14 @@ def run_chat_completion(client, model_name, messages, temperature=0.2, stream_ou
         return "".join(full_content)
 
     except Exception as e:
+        metadata['error'] = str(e)
         print(f"\n[API Error] {e}")
         return None
+    finally:
+        if stream is not None and hasattr(stream, 'close'):
+            stream.close()
+        if progress:
+            progress.close()
 
 
 def keep_best_retry_score(
@@ -244,7 +296,8 @@ def evaluate_task(task, args, current_system_prompt):
 
     loader = BenchmarkDataLoader()
     solver = TrussSolver("bin/framecalc.wasm")
-    client = OpenAI(api_key=args.api_key, base_url=args.api_base) if not args.debug else None
+    client = OpenAI(api_key=args.api_key, base_url=args.api_base, timeout=args.api_timeout,
+                    max_retries=0) if not args.debug else None
 
     # Load Raw GT Model for diagnosis
     gt_raw_json = loader.load_raw_model_by_id(task_id)
@@ -296,12 +349,19 @@ def evaluate_task(task, args, current_system_prompt):
             messages = base_messages + retry_context
 
             tqdm.write(f"[{task_id}] attempt {attempts_used}/{args.max_retries + 1}: requesting API")
+            response_metadata = {}
             response_text = run_chat_completion(
                 client,
                 args.model,
                 messages,
                 temperature=current_temp,
-                stream_output=args.verbose_response
+                stream_output=args.verbose_response,
+                max_tokens=args.max_tokens,
+                metadata=response_metadata,
+                reasoning_effort=args.reasoning_effort,
+                progress_label=f'{task_id} attempt {attempts_used}',
+                events_path=args.events_path,
+                progress_interval=args.progress_interval,
             )
             attempt_log = {
                 "attempt": attempts_used,
@@ -313,13 +373,26 @@ def evaluate_task(task, args, current_system_prompt):
                 "details": {},
                 "failure": None
             }
+            attempt_log.update(response_metadata)
+            # 保存原始回复后再调用求解器；即使本地诊断中断也有可审计记录。
+            append_event(args.events_path, dict(event='attempt_response', task_id=task_id, **attempt_log))
+            tqdm.write(f"[{task_id}] attempt {attempts_used}: finish={response_metadata['finish_reason']}, "
+                       f"content_chars={len(response_text or '')}, reasoning_chars={response_metadata['reasoning_chars']}, "
+                       f"usage={response_metadata['usage']}")
+
+            if response_metadata['finish_reason'] == 'length':
+                fail_reason = "Output Token Limit"
+                attempt_log['failure'] = fail_reason
+                attempt_logs.append(attempt_log)
+                tqdm.write(f"[{task_id}] attempt {attempts_used}: output limit reached ({args.max_tokens} tokens)")
+                continue
             
             if not response_text:
-                fail_reason = "API Failure"
+                fail_reason = "API Failure" if response_metadata['error'] else "Empty Response"
                 attempt_log["failure"] = fail_reason
                 attempt_logs.append(attempt_log)
-                tqdm.write(f"[{task_id}] attempt {attempts_used}: API failure")
-                break
+                tqdm.write(f"[{task_id}] attempt {attempts_used}: {fail_reason}")
+                continue
 
             json_str = extract_json(response_text)
             attempt_log["extracted_json"] = json_str
@@ -416,7 +489,7 @@ def evaluate_task(task, args, current_system_prompt):
     return result
 
 
-def run_task_batch(tasks, concurrency, task_runner, show_progress=True):
+def run_task_batch(tasks, concurrency, task_runner, show_progress=True, on_result=None):
     """
     题目级调度。并发完成顺序可能不同，但返回结果始终保持输入任务顺序。
     """
@@ -427,7 +500,13 @@ def run_task_batch(tasks, concurrency, task_runner, show_progress=True):
         iterator = enumerate(tasks)
         if show_progress:
             iterator = tqdm(iterator, total=len(tasks), desc="Evaluating", ascii=True)
-        return [task_runner(index, task) for index, task in iterator]
+        results = []
+        for index, task in iterator:
+            result = task_runner(index, task)
+            if on_result:
+                on_result(result)
+            results.append(result)
+        return results
 
     results = [None] * len(tasks)
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
@@ -441,6 +520,8 @@ def run_task_batch(tasks, concurrency, task_runner, show_progress=True):
         for future in iterator:
             index = future_to_index[future]
             results[index] = future.result()
+            if on_result:
+                on_result(results[index])
 
     return results
 
@@ -457,10 +538,20 @@ def main():
     parser.add_argument("--filter", type=str, default=None, help="Filter tasks")
     parser.add_argument("--verbose-response", action="store_true", help="Print full streaming model responses to console")
     parser.add_argument("--concurrency", type=int, default=1, help="Number of tasks to evaluate concurrently")
+    parser.add_argument("--max-tokens", type=int, default=8192, help="Output token budget including reasoning")
+    parser.add_argument("--output", type=str, default=None, help="Result JSON path")
+    parser.add_argument("--reasoning-effort", choices=["low", "medium", "high"], default=None, help="Requested reasoning effort")
+    parser.add_argument("--resume", action="store_true", help="Skip durably completed tasks from matching checkpoint")
+    parser.add_argument("--progress-interval", type=float, default=15, help="Stream heartbeat interval in seconds")
+    parser.add_argument("--api-timeout", type=float, default=120, help="API socket inactivity timeout in seconds")
 
     args = parser.parse_args()
     if args.concurrency < 1:
         parser.error("--concurrency must be >= 1")
+    if args.max_tokens < 1:
+        parser.error("--max-tokens must be >= 1")
+    if args.progress_interval <= 0 or args.api_timeout <= 0:
+        parser.error("progress interval and API timeout must be positive")
 
     # 1. System Prompt
     current_system_prompt = PROMPT_REGISTRY.get(args.prompt_type)
@@ -482,11 +573,22 @@ def main():
     if args.concurrency > 1 and args.verbose_response:
         print("[Warning] --verbose-response output may interleave when --concurrency > 1.")
 
-    results = run_task_batch(
-        tasks,
+    output_filename = args.output or f"eval_result_{'DEBUG' if args.debug else args.model.replace('/', '_')}.json"
+    config = dict(model=args.model, api_base=args.api_base, max_tokens=args.max_tokens,
+                  reasoning_effort=args.reasoning_effort, prompt_type=args.prompt_type,
+                  system_prompt=current_system_prompt, max_retries=args.max_retries, debug=args.debug,
+                  task_ids=[t['id'] for t in tasks])
+    checkpoint = CheckpointStore(output_filename, config, resume=args.resume)
+    args.events_path = str(checkpoint.directory / 'events.jsonl')
+    pending = [t for t in tasks if t['id'] not in checkpoint.results]
+    print(f"Checkpoint: {len(checkpoint.results)}/{len(tasks)} completed; {len(pending)} pending", flush=True)
+    run_task_batch(
+        pending,
         args.concurrency,
         lambda index, task: evaluate_task(task, args, current_system_prompt),
+        on_result=checkpoint.save,
     )
+    results = [checkpoint.results[t['id']] for t in tasks]
 
     # Summary
     total_score = sum(r['score'] for r in results)
@@ -529,9 +631,7 @@ def main():
     print(f"{'OVERALL':<15} | {len(results):<8} | {total_score:<10.2f} | {total_possible:<10.0f} | {weighted_acc:<9.2f}%")
     print("=" * 60)
     
-    output_filename = f"eval_result_{'DEBUG' if args.debug else args.model.replace('/', '_')}.json"
-    with open(output_filename, "w") as f:
-        json.dump(results, f, indent=2)
+    atomic_json(output_filename, results)
     print(f"Results saved to {output_filename}")
 
 if __name__ == "__main__":

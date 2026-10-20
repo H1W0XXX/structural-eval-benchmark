@@ -143,14 +143,12 @@ $$
 
 ## 📊 Leaderboard
 
-| Model | Weighted Accuracy | Notes |
-| :--- | :---: | :--- |
-| **Qwen3.5-35B-A3B** | 40.23% | Retries: 3 |
-| **Qwen3-VL-32B-Instruct** | 35.16% | Retries: 3 |
-| **gemma-4-31B-it** | 33.98% | Retries: 3 |
-| **GLM-4.5V-INT8** | 19.53% | Retries: 3 |
+| Model | Beam | Frame | Truss | Score | Weighted Accuracy |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **deepseek-v4.1-flash** | 100.00% | 50.00% | 100.00% | 50.50 / 64 | **78.91%** |
+| **glm-5.3-flash** | 100.00% | 46.30% | 100.00% | 49.50 / 64 | **77.34%** |
 
-*Note: Data updated on 2026.4.5, based on v1.0 dataset (25 tasks).*
+*Note: Updated on 2026-10-21 using the v1.0 dataset: 25 tasks (5 beam, 10 frame, and 10 truss), with a total difficulty weight of 64. Evaluation settings: 32,768 output tokens (including reasoning and the final answer), reasoning_effort=high, concurrency of 8 per model, and up to 2 retries (3 attempts per task). Category accuracies are also weighted by difficulty.*
 
 ## License
 
